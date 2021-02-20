@@ -1,2 +1,1 @@
-# course-project-twitter-sentiment-analysis
-Course project. Twitter Sentiment Analysis
+# Course project. Twitter Sentiment Analysis
