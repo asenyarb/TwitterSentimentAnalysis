@@ -1,0 +1,7 @@
+.idea
+__pycache__
+/data
+/nn/*
+!/nn/nn.py
+auth_token
+deepl.dump
