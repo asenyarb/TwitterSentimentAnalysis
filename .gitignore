@@ -5,3 +5,5 @@ __pycache__
 !/nn/nn.py
 auth_token
 deepl.dump
+db.sqlite3
+/media

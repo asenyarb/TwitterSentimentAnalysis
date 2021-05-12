@@ -2,8 +2,8 @@ import random
 import time
 from operator import itemgetter
 from itertools import combinations
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Conv1D, MaxPooling1D, GlobalMaxPooling1D, LSTM
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Input, Dense, Flatten, Conv1D, GlobalMaxPooling1D, LSTM, Concatenate
 import numpy as np
 import re
 import string
@@ -16,7 +16,7 @@ symbols_values = {
     )
 }
 max_symbol_value = max(symbols_values.values())
-multiple_dots_or_commas_pattern = re.compile('([.,]+|@[A-z]+)')
+multiple_dots_or_commas_pattern = re.compile('([.,=:;(){}P]+|@[A-z]+)')
 
 
 def chunks(lst, size):
@@ -61,6 +61,15 @@ def process_words_to_matrix(words, matrix_rows_n: int, matrix_cols_n: int):
     words = words + [''] * max(matrix_rows_n - len(words), 0)
 
     return [process_word_to_numbers_list(w, matrix_cols_n) for w in words]
+
+
+def process_single_sentence(sentence):
+    sentence = preprocess_sentence(sentence)
+    if not sentence:
+        return None
+    sentence = sentence.split(' ')
+    sentence = preprocess_words(sentence, matrix_cols_n)[:matrix_rows_n]
+    return process_words_to_matrix(sentence, matrix_rows_n, matrix_cols_n)
 
 
 def prepare_test_data(positives_list_filepath, others_list_filepath, matrix_rows_n: int, matrix_cols_n: int):
@@ -119,8 +128,37 @@ def teach_recursive_model_and_save(test_results, matrix_rows_n, matrix_cols_n, m
     model.add(Dense(1, activation='sigmoid'))
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-    epochs = 20
-    model.fit(x, y, batch_size=32, epochs=epochs, validation_split=0.10)
+    epochs = 100
+    model.fit(x, y, batch_size=32, epochs=epochs, validation_split=0.10, verbose=2)
+    model.save(model_name)
+
+
+def teach_conv_recursive_model_and_save(test_results, matrix_rows_n, matrix_cols_n, model_name):
+    normalized_data_to_process, comparison_results = test_results
+    x = np.array(normalized_data_to_process)
+    y = np.array(comparison_results)
+
+    input_shape = Input(shape=(matrix_rows_n, matrix_cols_n))
+
+    tower1 = Conv1D(
+        100, 2, padding='valid', input_shape=(matrix_rows_n, matrix_cols_n), activation='relu', strides=1
+    )(input_shape)
+    tower1 = GlobalMaxPooling1D()(tower1)
+    tower1 = Dense(256, activation='relu')(tower1)
+
+    tower2 = LSTM(128)(input_shape)
+    tower2 = Dense(256, activation='relu')(tower2)
+
+    merged = Concatenate()([tower1, tower2])
+
+    out = Dense(256, activation='relu')(merged)
+    out = Dense(1, activation='sigmoid')(out)
+
+    model = Model(input_shape, out)
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+    epochs = 100
+    model.fit(x, y, batch_size=32, epochs=epochs, validation_split=0.10, verbose=2)
     model.save(model_name)
 
 
@@ -130,7 +168,7 @@ def prepare_data_and_teach_model(
     model_name
 ):
     d = prepare_test_data(
-        positives_path, neutral_path,
+        path_to_teach_for, neutral_tweets_path,
         matrix_rows_number, matrix_cols_number
     )
 
@@ -138,14 +176,15 @@ def prepare_data_and_teach_model(
 
     teach_cnn_model_and_save(d, matrix_rows_number, matrix_cols_number, f'{model_name}_cnn')
     teach_recursive_model_and_save(d, matrix_rows_number, matrix_cols_number, f'{model_name}_rnn')
+    teach_conv_recursive_model_and_save(d, matrix_rows_number, matrix_cols_number, f'{model_name}_cnn_rnn')
 
     print(f'saved model to {model_name}/')
 
 
-if __name__ == '__main__':
-    matrix_rows_number = 20
-    matrix_cols_number = 20
+matrix_rows_n = 20
+matrix_cols_n = 20
 
+if __name__ == '__main__':
     positives_path, neutral_path, negatives_path = (
         './data/positive_tweets_list.txt',
         './data/neutral_tweets_list.txt',
@@ -154,12 +193,12 @@ if __name__ == '__main__':
 
     prepare_data_and_teach_model(
         positives_path, neutral_path,
-        matrix_rows_number, matrix_cols_number,
+        matrix_rows_n, matrix_cols_n,
         './nn/positives_nn'
     )
 
     prepare_data_and_teach_model(
         negatives_path, neutral_path,
-        matrix_rows_number, matrix_cols_number,
+        matrix_rows_n, matrix_cols_n,
         './nn/negatives_nn'
     )
