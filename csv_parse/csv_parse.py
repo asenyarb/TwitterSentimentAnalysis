@@ -44,6 +44,20 @@ def process_sentences_with_mystem(in_file_name, out_file_name, csv_file_tweet_te
             c_v.writerows(lines_set)
 
 
+def stemmatize_single_sentence(sentence):
+    command = "./csv_parse/mystem -c --format json".split(' ')
+    sentence = sentence.replace('\n', '').replace('\\n', '')
+    sb = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    s = sb.communicate(sentence.encode())[0].decode().strip().replace('\n', ',')
+
+    d = json.loads(s)
+    out = ''
+    for el in d:
+        out += ('analysis' in el and el['analysis'] and el['analysis'][0]['lex']) or el['text']
+    out = out.strip()
+    return out
+
+
 def create_tweets_text_files(
     tweets_csv_path, new_tweets_txt_filepath,
     column_tweet_index
