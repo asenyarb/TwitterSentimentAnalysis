@@ -65,7 +65,7 @@ class NNEnglish:
     # KERAS
     SEQUENCE_LENGTH = 300
     EPOCHS = 8
-    BATCH_SIZE = 1024
+    BATCH_SIZE = 200
 
     # SENTIMENT
     POSITIVE = "POSITIVE"
