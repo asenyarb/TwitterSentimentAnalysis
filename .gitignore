@@ -1,6 +1,7 @@
 .idea
 __pycache__
 /data
+/nn_models/en/
 /nn/*
 !/nn/nn.py
 auth_token
