@@ -75,6 +75,8 @@ class NNEnglish:
 
     # EXPORT
     KERAS_MODEL = "./nn_models/en/model.h5"
+    KERAS_CONV_MODEL = "./nn_models/en/conv_model.h5"
+    KERAS_REC_CONV_MODEL = "./nn_models/en/rec_conv_model.h5"
     WORD2VEC_MODEL = "./nn_models/en/model.w2v"
     TOKENIZER_MODEL = "./nn_models/en/tokenizer.pkl"
     ENCODER_MODEL = "./nn_models/en/encoder.pkl"
@@ -88,7 +90,9 @@ class NNEnglish:
     tokenizer: Tokenizer = None
     vocab_size: int = None
     encoder: LabelEncoder = None
-    recurrent_mode: Sequential = None
+    recurrent_model: Sequential = None
+    convolutional_model: Sequential = None
+    convolutional_recurrent_model: Sequential = None
 
     @classmethod
     def initialize(cls):
@@ -206,13 +210,25 @@ class NNEnglish:
 
     @classmethod
     def __setup_models(cls):
+        cls.__setup_tokenizer()
         try:
-            print('Loading keras model')
-            keras.models.load_model(cls.KERAS_MODEL)
-            cls.__setup_tokenizer()
+            print('Loading rnn model')
+            cls.recurrent_model = keras.models.load_model(cls.KERAS_MODEL)
         except (IOError, ImportError):
-            print('Unable to load keras model. Creating and training a new one')
+            print('Unable to load rnn model. Creating and training a new one')
             cls.__create_and_train_recurrent_model()
+        try:
+            print('Loading cnn model')
+            cls.convolutional_model = keras.models.load_model(cls.KERAS_CONV_MODEL)
+        except (IOError, ImportError):
+            print('Unable to load cnn model. Creating and training a new one')
+            cls.__create_and_train_convolutional_model()
+        try:
+            print('Loading rnn + cnn model')
+            cls.convolutional_recurrent_model = keras.models.load_model(cls.KERAS_REC_CONV_MODEL)
+        except (IOError, ImportError):
+            print('Unable to load rnn+cnn model. Creating and training a new one')
+            cls.__create_and_train_convolutional_recurrent_model()
 
     @classmethod
     def __create_and_train_recurrent_model(cls):
@@ -274,6 +290,151 @@ class NNEnglish:
         print("LOSS:", score[0])
 
         cls.recurrent_model = model
+        cls.__plot_learning_graphs(model, history, x_test)
+
+    @classmethod
+    def __create_and_train_convolutional_model(cls):
+        cls.__load_train_data()
+        cls.__setup_w2v_model()
+        cls.__setup_tokenizer()
+        cls.__setup_label_encoder()
+
+        assert cls.df_train is not None
+        assert cls.w2v_model is not None
+        assert cls.tokenizer is not None
+        assert cls.vocab_size
+        assert cls.encoder is not None
+
+        x_train = pad_sequences(cls.tokenizer.texts_to_sequences(cls.df_train.text), maxlen=cls.SEQUENCE_LENGTH)
+        x_test = pad_sequences(cls.tokenizer.texts_to_sequences(cls.df_test.text), maxlen=cls.SEQUENCE_LENGTH)
+        labels = cls.df_train.target.unique().tolist()
+        labels.append(cls.NEUTRAL)
+
+        y_train = cls.encoder.transform(cls.df_train.target.tolist())
+        y_test = cls.encoder.transform(cls.df_test.target.tolist())
+
+        y_train = y_train.reshape(-1, 1)
+        y_test = y_test.reshape(-1, 1)
+
+        print("x_train", x_train.shape)
+        print("y_train", y_train.shape, '\n')
+        print("x_test", x_test.shape)
+        print("y_test", y_test.shape)
+
+        embedding_layer = cls.__get_embedding_layer()
+        model = Sequential()
+        model.add(embedding_layer)
+        model.add(Dropout(0.5))
+        model.add(Conv1D(100, 2, padding='valid', activation='relu', strides=1))
+        model.add(GlobalMaxPooling1D())
+        model.add(Dense(256, activation='relu'))
+        model.add(Dense(1, activation='sigmoid'))
+
+        model.compile(
+            loss='binary_crossentropy',
+            optimizer="adam",
+            metrics=['accuracy']
+        )
+        callbacks = [
+            ReduceLROnPlateau(monitor='val_loss', patience=5, cooldown=0),
+            EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=5)
+        ]
+        history = model.fit(x_train, y_train,
+                            batch_size=cls.BATCH_SIZE,
+                            epochs=cls.EPOCHS,
+                            validation_split=0.1,
+                            verbose=1,
+                            callbacks=callbacks)
+
+        model.save(cls.KERAS_CONV_MODEL)
+
+        score = model.evaluate(x_test, y_test, batch_size=cls.BATCH_SIZE)
+        print("ACCURACY:", score[1])
+        print("LOSS:", score[0])
+
+        cls.convolutional = model
+        cls.__plot_learning_graphs(model, history, x_test)
+
+    @classmethod
+    def __create_and_train_convolutional_recurrent_model(cls):
+        cls.__load_train_data()
+        cls.__setup_w2v_model()
+        cls.__setup_tokenizer()
+        cls.__setup_label_encoder()
+
+        assert cls.df_train is not None
+        assert cls.w2v_model is not None
+        assert cls.tokenizer is not None
+        assert cls.vocab_size
+        assert cls.encoder is not None
+
+        x_train = pad_sequences(cls.tokenizer.texts_to_sequences(cls.df_train.text), maxlen=cls.SEQUENCE_LENGTH)
+        x_test = pad_sequences(cls.tokenizer.texts_to_sequences(cls.df_test.text), maxlen=cls.SEQUENCE_LENGTH)
+        labels = cls.df_train.target.unique().tolist()
+        labels.append(cls.NEUTRAL)
+
+        y_train = cls.encoder.transform(cls.df_train.target.tolist())
+        y_test = cls.encoder.transform(cls.df_test.target.tolist())
+
+        y_train = y_train.reshape(-1, 1)
+        y_test = y_test.reshape(-1, 1)
+
+        print("x_train", x_train.shape)
+        print("y_train", y_train.shape, '\n')
+        print("x_test", x_test.shape)
+        print("y_test", y_test.shape)
+
+        embedding_layer = cls.__get_embedding_layer()
+
+        #####
+
+        input_layer = Input()
+        input_layer = embedding_layer(input_layer)
+        input_layer = Dropout(0.5)(input_layer)
+
+        ######
+
+        tower1 = Conv1D(
+            100, 2, padding='valid', activation='relu', strides=1
+        )(input_layer)
+        tower1 = GlobalMaxPooling1D()(tower1)
+        tower1 = Dense(24, activation='relu')(tower1)
+
+        ######
+
+        tower2 = LSTM(100, dropout=0.2, recurrent_dropout=0.2)(input_layer)
+
+        ######
+
+        merged = Concatenate()([tower1, tower2])
+        merged = Dense(5, activation='relu')(merged)
+        out = Dense(1, activation='sigmoid')(merged)
+
+        model = Model(input_layer, out)
+
+        model.compile(
+            loss='binary_crossentropy',
+            optimizer="adam",
+            metrics=['accuracy']
+        )
+        callbacks = [
+            ReduceLROnPlateau(monitor='val_loss', patience=5, cooldown=0),
+            EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=5)
+        ]
+        history = model.fit(x_train, y_train,
+                            batch_size=cls.BATCH_SIZE,
+                            epochs=cls.EPOCHS,
+                            validation_split=0.1,
+                            verbose=1,
+                            callbacks=callbacks)
+
+        model.save(cls.KERAS_REC_CONV_MODEL)
+
+        score = model.evaluate(x_test, y_test, batch_size=cls.BATCH_SIZE)
+        print("ACCURACY:", score[1])
+        print("LOSS:", score[0])
+
+        cls.convolutional_recurrent_model = model
         cls.__plot_learning_graphs(model, history, x_test)
 
     @classmethod

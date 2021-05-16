@@ -1,7 +1,7 @@
 from tensorflow.keras.models import load_model
 
-from csv_parse.csv_parse import stemmatize_single_sentence
-from nn.nn import process_single_sentence
+from csv_parse.csv_parse import CSVParseRU
+from nn.nn import NNRussian, NNEnglish
 
 nn_types = {
     'cnn': 'Свёрточная',
@@ -35,11 +35,11 @@ def analyze_emojis(sentence):
     return total * 0.2
 
 
-def analyze_sentence(sentence, nn_type):
+def analyze_russian_sentence(sentence, nn_type):
     emojis_offset = analyze_emojis(sentence)
 
-    sentence = stemmatize_single_sentence(sentence)
-    processed_sentence = process_single_sentence(sentence)  # still not np.array
+    sentence = CSVParseRU.stemmatize_single_sentence(sentence)
+    processed_sentence = NNRussian.process_single_sentence(sentence)
 
     negative_result = analyze_sentence_negative(processed_sentence, nn_type) + emojis_offset
     positive_result = analyze_sentence_positive(processed_sentence, nn_type) + emojis_offset
@@ -57,3 +57,24 @@ def analyze_sentence(sentence, nn_type):
         result = 'Нейтральный'
 
     return result
+
+
+def analyze_english_sentence(sentence, nn_type):
+    name_to_model = dict(
+        cnn=NNEnglish.convolutional_model,
+        rnn=NNEnglish.recurrent_model,
+        cnn_rnn=NNEnglish.convolutional_recurrent_model
+    )
+
+    model = name_to_model[nn_type]
+    label = NNEnglish.predict(
+        model, sentence, include_neutral=True
+    )['label']
+
+    label_to_result = {
+        NNEnglish.POSITIVE: 'Позитивный',
+        NNEnglish.NEUTRAL: 'Нейтральный',
+        NNEnglish.NEGATIVE: 'Негативный'
+    }
+
+    return label_to_result[label]

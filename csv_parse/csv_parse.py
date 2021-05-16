@@ -1,39 +1,6 @@
-# DataFrame
-import keras.models
-import pandas as pd
-
-# Matplot
-import matplotlib.pyplot as plt
-
-# Scikit-learn
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
-
-# Keras
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
-from keras.models import Sequential
-from keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Conv1D, MaxPooling1D, LSTM
-from keras.callbacks import ReduceLROnPlateau, EarlyStopping
-
-# nltk
-from nltk.corpus import stopwords
-from nltk.stem import SnowballStemmer
-
-# Word2vec
-import gensim
-
-# Utility
 import csv
 import json
 import subprocess
-import re
-import numpy as np
-from collections import Counter
-import time
-import pickle
-import itertools
 
 
 class CSVParseRU:
