@@ -8,3 +8,5 @@ auth_token
 deepl.dump
 db.sqlite3
 /media
+/venv
+/imgs

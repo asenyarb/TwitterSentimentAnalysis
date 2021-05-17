@@ -8,7 +8,7 @@ import re
 from functools import reduce
 import string
 # DataFrame
-import keras.models
+import tensorflow.keras.models
 import pandas as pd
 
 # Matplot
@@ -20,11 +20,11 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 
 # Keras
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
-from keras.models import Sequential
-from keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Conv1D, MaxPooling1D, LSTM
-from keras.callbacks import ReduceLROnPlateau, EarlyStopping
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Conv1D, MaxPooling1D, LSTM
+from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
 
 # nltk
 import nltk
@@ -65,7 +65,7 @@ class NNEnglish:
     # KERAS
     SEQUENCE_LENGTH = 300
     EPOCHS = 8
-    BATCH_SIZE = 200
+    BATCH_SIZE = 1200
 
     # SENTIMENT
     POSITIVE = "POSITIVE"
@@ -213,19 +213,19 @@ class NNEnglish:
         cls.__setup_tokenizer()
         try:
             print('Loading rnn model')
-            cls.recurrent_model = keras.models.load_model(cls.KERAS_MODEL)
+            cls.recurrent_model = tensorflow.keras.models.load_model(cls.KERAS_MODEL)
         except (IOError, ImportError):
             print('Unable to load rnn model. Creating and training a new one')
-            cls.__create_and_train_recurrent_model()
+            #cls.__create_and_train_recurrent_model()
         try:
             print('Loading cnn model')
-            cls.convolutional_model = keras.models.load_model(cls.KERAS_CONV_MODEL)
+            cls.convolutional_model = tensorflow.keras.models.load_model(cls.KERAS_CONV_MODEL)
         except (IOError, ImportError):
             print('Unable to load cnn model. Creating and training a new one')
             cls.__create_and_train_convolutional_model()
         try:
             print('Loading rnn + cnn model')
-            cls.convolutional_recurrent_model = keras.models.load_model(cls.KERAS_REC_CONV_MODEL)
+            cls.convolutional_recurrent_model = tensorflow.keras.models.load_model(cls.KERAS_REC_CONV_MODEL)
         except (IOError, ImportError):
             print('Unable to load rnn+cnn model. Creating and training a new one')
             cls.__create_and_train_convolutional_recurrent_model()
@@ -388,24 +388,23 @@ class NNEnglish:
 
         #####
 
-        input_layer = Input()
-        input_layer = embedding_layer(input_layer)
-        input_layer = Dropout(0.5)(input_layer)
+        input_layer = Input(x_train.shape[1:])
 
         ######
-
+        tower1 = embedding_layer(input_layer)
+        tower1 = Dropout(0.5)(tower1)
         tower1 = Conv1D(
             100, 2, padding='valid', activation='relu', strides=1
-        )(input_layer)
+        )(tower1)
         tower1 = GlobalMaxPooling1D()(tower1)
         tower1 = Dense(24, activation='relu')(tower1)
 
         ######
-
-        tower2 = LSTM(100, dropout=0.2, recurrent_dropout=0.2)(input_layer)
+        tower2 = embedding_layer(input_layer)
+        tower1 = Dropout(0.5)(tower1)
+        tower2 = LSTM(100, dropout=0.2, recurrent_dropout=0.2)(tower2)
 
         ######
-
         merged = Concatenate()([tower1, tower2])
         merged = Dense(5, activation='relu')(merged)
         out = Dense(1, activation='sigmoid')(merged)
@@ -422,7 +421,7 @@ class NNEnglish:
             EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=5)
         ]
         history = model.fit(x_train, y_train,
-                            batch_size=cls.BATCH_SIZE,
+                            batch_size=int(cls.BATCH_SIZE / 2),
                             epochs=cls.EPOCHS,
                             validation_split=0.1,
                             verbose=1,
@@ -481,8 +480,8 @@ class NNEnglish:
     @classmethod
     def __plot_learning_graphs(cls, model, history, x_test):
         cls.__save_learning_results_plot(
-            acc=history.history['acc'],
-            val_acc=history.history['val_acc'],
+            acc=history.history['accuracy'],
+            val_acc=history.history['val_accuracy'],
             loss=history.history['loss'],
             val_loss=history.history['val_loss']
         )
@@ -542,7 +541,7 @@ class NNEnglish:
 
         plt.ylabel('True label', fontsize=25)
         plt.xlabel('Predicted label', fontsize=25)
-        plt.savefig('./imgs/training_graph.png')
+        plt.savefig('./imgs/training_graph_squares.png')
 
 
 class NNRussian:
