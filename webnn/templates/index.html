@@ -30,7 +30,7 @@
             <select class="form-control mb-2" name="nn_type" aria-label="Выберите тип нейронной сети">
                 <option value="" disabled selected>Тип нейронной сети</option>
                 {% for value, name in nn_types %}
-                <option value="{{ value }}">{{ name }}</option>
+                <option {% if nn_type == value %}selected{% endif %} value="{{ value }}">{{ name }}</option>
                 {% endfor %}
             </select>
             <input

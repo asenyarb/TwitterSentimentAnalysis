@@ -15,14 +15,15 @@ class IndexView(View):
                 'nn_types': list(nn_types.items()),
                 'sentence': '',
                 'max_words': NNRussian.matrix_rows_n,
-                'max_word_symbols': NNRussian.matrix_cols_n
+                'max_word_symbols': NNRussian.matrix_cols_n,
+                'nn_type': None
             }
         )
 
     def post(self, request, *args, **kwargs):
         sentence = request.POST['sentence']
         nn_type = request.POST['nn_type'] if 'nn_type' in request.POST else None
-        lang = 'en'
+        lang = 'ru'
 
         error = None
         result = None
@@ -52,6 +53,7 @@ class IndexView(View):
                 'nn_types': list(nn_types.items()),
                 'sentence': sentence,
                 'max_words': NNRussian.matrix_rows_n,
-                'max_word_symbols': NNRussian.matrix_cols_n
+                'max_word_symbols': NNRussian.matrix_cols_n,
+                'nn_type': nn_type
             }
         )

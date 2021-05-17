@@ -65,7 +65,7 @@ class NNEnglish:
     # KERAS
     SEQUENCE_LENGTH = 300
     EPOCHS = 8
-    BATCH_SIZE = 1200
+    BATCH_SIZE = 120
 
     # SENTIMENT
     POSITIVE = "POSITIVE"
@@ -216,7 +216,7 @@ class NNEnglish:
             cls.recurrent_model = tensorflow.keras.models.load_model(cls.KERAS_MODEL)
         except (IOError, ImportError):
             print('Unable to load rnn model. Creating and training a new one')
-            #cls.__create_and_train_recurrent_model()
+            cls.__create_and_train_recurrent_model()
         try:
             print('Loading cnn model')
             cls.convolutional_model = tensorflow.keras.models.load_model(cls.KERAS_CONV_MODEL)
@@ -721,14 +721,4 @@ class NNRussian:
         print(f'saved model to {model_name}/')
 
 
-if __name__ == '__main__':
-    NNEnglish.initialize()
-    #positives_path, neutral_path, negatives_path = (
-    #    './data/positive_tweets_list.txt',
-    #    './data/neutral_tweets_list.txt',
-    #    './data/negative_tweets_list.txt'
-    #)
-    #NNRussian.prepare_data_and_teach_model(
-    #    positives_path, negatives_path,
-    #    './nn/positives_negatives_nn'
-    #)
+NNEnglish.initialize()
