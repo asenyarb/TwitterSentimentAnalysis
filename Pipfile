@@ -1,0 +1,29 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+gensim = "*"
+keras = "*"
+matplotlib = "*"
+nltk = "*"
+numpy = "*"
+pandas = "*"
+pipenv = "*"
+psycopg2 = "*"
+psycopg2-binary = "*"
+requests = "*"
+scikit-learn = "*"
+scipy = "*"
+stemming = "*"
+tensorflow-gpu = "*"
+Django = "*"
+python-Levenshtein = "*"
+spacy = "*"
+pydot = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"

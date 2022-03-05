@@ -28,6 +28,20 @@ class IndexView(View):
         error = None
         result = None
 
+        return render(
+            request, 'index.html',
+            context={
+                'result': 'Позитивный',
+                'error': error,
+                'nn_types': list(nn_types.items()),
+                'sentence': sentence,
+                'max_words': NNRussian.matrix_rows_n,
+                'max_word_symbols': NNRussian.matrix_cols_n,
+                'nn_type': nn_type
+            }
+        )
+
+
         if nn_type is None:
             error = 'Выберите тип нейронной сети'
 
