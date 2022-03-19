@@ -278,6 +278,7 @@ class NNEnglish:
         cls.__setup_label_encoder()
         try:
             print('Loading cnn model...')
+            raise ImportError('as')
             cls.convolutional_model = tensorflow.keras.models.load_model(cls.KERAS_CONV_MODEL)
         except (IOError, ImportError):
             print('Unable to load cnn model. Creating and training a new one')
@@ -343,10 +344,14 @@ class NNEnglish:
             optimizer="adam",
             metrics=['accuracy']
         )
+        callbacks = [
+            ReduceLROnPlateau(monitor='val_loss', patience=5, cooldown=0),
+            EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=5)
+        ]
         history = model.fit(x_train, y_train,
                             batch_size=cls.BATCH_SIZE,
                             epochs=cls.EPOCHS,
-                            validation_split=0.1, verbose=1)
+                            validation_split=0.1, verbose=1, callbacks=callbacks)
 
         print(history.history['accuracy'], history.history['val_accuracy'], history.history['loss'], history.history['val_loss'])
 
@@ -377,6 +382,6 @@ class NNEnglish:
 
 
 NNEnglish.initialize()
-if __name__ == '__main__':
-    res = NNEnglish.predict(NNEnglish.convolutional_model, "Man, I like this movie", include_neutral=False)
-    print(res)
+#if __name__ == '__main__':
+#    res = NNEnglish.predict(NNEnglish.convolutional_model, "Man, I like this movie", include_neutral=False)
+#    print(res)
