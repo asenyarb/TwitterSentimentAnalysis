@@ -1,3 +1,8 @@
+import itertools
+
+# Matplot
+import matplotlib.pyplot as plt
+
 # DataFrame
 import tensorflow.keras.models
 import pandas as pd
@@ -8,20 +13,18 @@ from nltk.wsd import lesk
 from nltk.tokenize import word_tokenize, sent_tokenize
 
 #import spacy
-# Matplot
-#import matplotlib.pyplot as plt
 
 # Scikit-learn
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-#from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 
 # Keras
 import tensorflow as tf
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Conv1D, MaxPooling1D, LSTM
+from tensorflow.keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Conv1D, Conv2D, MaxPooling1D, LSTM
 from tensorflow.keras.layers import Input, Dense, Flatten, Conv1D, GlobalMaxPooling1D, LSTM, Concatenate
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
 from keras.utils.vis_utils import plot_model
@@ -68,7 +71,7 @@ class NNEnglish:
 
     # TEXT CLEANING
     TEXT_CLEANING_RE = re.compile(r"@\S+|https?:\S+|http?:\S")  #"|[^A-Za-z0-9]+")
-    TEXT_CLEANING_RE2 = re.compile(r'[^a-zA-Z0-9]+')
+    TEXT_CLEANING_RE2 = re.compile(r'[^a-zA-Z0-9 ]+')
 
     # WORD2VEC
     W2V_SIZE = 300
@@ -79,7 +82,8 @@ class NNEnglish:
     # KERAS
     SEQUENCE_LENGTH = 300
     EPOCHS = 5
-    BATCH_SIZE = 5
+    BATCH_SIZE = 300
+    BATCH_SIZE_REC = 100
 
     # SENTIMENT
     POSITIVE = "POSITIVE"
@@ -89,8 +93,8 @@ class NNEnglish:
 
     # EXPORT
     DF_PREPROCESSED_SAVE_PATH = './data/preprocessed_df_pickle.pkl'
-    KERAS_MODEL = "./nn_models/en/model_new.h5"
-    KERAS_CONV_MODEL = "./nn_models/en/conv_model_new.h5"
+    KERAS_CONV_MODEL = "./nn_models/en/conv_model.h5"
+    KERAS_REC_MODEL = "./nn_models/en/rec_model.h5"
     KERAS_REC_CONV_MODEL = "./nn_models/en/rec_conv_model.h5"
     WORD2VEC_MODEL = "./nn_models/en/model.w2v"
     TOKENIZER_MODEL = "./nn_models/en/tokenizer.pkl"
@@ -283,6 +287,13 @@ class NNEnglish:
         except (IOError, ImportError):
             print('Unable to load cnn model. Creating and training a new one')
             cls.__create_and_train_convolutional_model()
+        #try:
+        #    print('Loading rnn model...')
+        #    raise ImportError('as')
+        #    cls.recurrent_model = tensorflow.keras.models.load_model(cls.KERAS_REC_MODEL)
+        #except (IOError, ImportError):
+        #    print('Unable to load rnn model. Creating and training a new one')
+        #    cls.__create_and_train_recurrent_model()
 
     @classmethod
     def __get_embedding_layer(cls):
@@ -332,12 +343,12 @@ class NNEnglish:
         model = Sequential()
         model.add(cls.__get_embedding_layer())
         #model.add(Dropout(0.5))
-        model.add(Conv1D(100, 2, padding='valid', activation='relu', strides=1))
+        model.add(Conv1D(50, 100, padding='valid', activation='relu', strides=1))
         model.add(GlobalMaxPooling1D())
-        model.add(Dense(256, activation='relu'))
+        model.add(Dense(5, activation='relu'))
         model.add(Dense(1, activation='sigmoid'))
         print(f"Here's the model summary:\n{model.summary()}")
-        plot_model(model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
+        plot_model(model, to_file='conv_model_plot.png', show_shapes=True, show_layer_names=True)
 
         model.compile(
             loss='binary_crossentropy',
@@ -346,14 +357,19 @@ class NNEnglish:
         )
         callbacks = [
             ReduceLROnPlateau(monitor='val_loss', patience=5, cooldown=0),
-            EarlyStopping(monitor='val_acc', min_delta=1e-4, patience=5)
+            EarlyStopping(monitor='val_accuracy', min_delta=1e-4, patience=5)
         ]
         history = model.fit(x_train, y_train,
                             batch_size=cls.BATCH_SIZE,
                             epochs=cls.EPOCHS,
                             validation_split=0.1, verbose=1, callbacks=callbacks)
 
-        print(history.history['accuracy'], history.history['val_accuracy'], history.history['loss'], history.history['val_loss'])
+        print(
+            history.history['accuracy'],
+            history.history['val_accuracy'],
+            history.history['loss'],
+            history.history['val_loss']
+        )
 
         model.save(cls.KERAS_CONV_MODEL)
 
@@ -362,6 +378,75 @@ class NNEnglish:
         print("LOSS:", score[0])
 
         cls.convolutional_model = model
+        cls.__plot_learning_graphs('conv', model, history, x_test)
+
+    @classmethod
+    def __create_and_train_recurrent_model(cls):
+        assert cls.df_train is not None
+        assert cls.w2v is not None
+        assert cls.vocab_size
+        assert cls.encoder is not None
+
+        x_train = pad_sequences(cls.tokenizer.texts_to_sequences(cls.df_train.text), maxlen=cls.SEQUENCE_LENGTH)
+        x_test = pad_sequences(cls.tokenizer.texts_to_sequences(cls.df_test.text), maxlen=cls.SEQUENCE_LENGTH)
+        labels = cls.df_train.target.unique().tolist()
+        labels.append(cls.NEUTRAL)
+
+        y_train = cls.encoder.transform(cls.df_train.target.tolist())
+        y_test = cls.encoder.transform(cls.df_test.target.tolist())
+
+        y_train = y_train.reshape(-1, 1)
+        y_test = y_test.reshape(-1, 1)
+
+        print("x_train", x_train.shape)
+        print("y_train", y_train.shape, '\n')
+        print("x_test", x_test.shape)
+        print("y_test", y_test.shape)
+
+        model = Sequential()
+        model.add(cls.__get_embedding_layer())
+        model.add(LSTM(100))
+        model.add(Dense(1, activation='sigmoid'))
+
+        print(f"Here's the model summary:\n{model.summary()}")
+
+        plot_model(model, to_file='rec_model_plot.png', show_shapes=True, show_layer_names=True)
+
+        model.compile(
+            loss='binary_crossentropy',
+            optimizer="adam",
+            metrics=['accuracy']
+        )
+        callbacks = [
+            ReduceLROnPlateau(monitor='val_loss', patience=5, cooldown=0),
+            EarlyStopping(monitor='val_accuracy', min_delta=1e-4, patience=5)
+        ]
+        history = model.fit(x_train, y_train,
+                            batch_size=cls.BATCH_SIZE_REC,
+                            epochs=cls.EPOCHS,
+                            validation_split=0.1,
+                            verbose=1,
+                            callbacks=callbacks)
+
+        print(
+            history.history['accuracy'],
+            history.history['val_accuracy'],
+            history.history['loss'],
+            history.history['val_loss']
+        )
+
+        model.save(cls.KERAS_REC_MODEL)
+
+        score = model.evaluate(x_test, y_test, batch_size=cls.BATCH_SIZE_REC)
+        print("ACCURACY:", score[1])
+        print("LOSS:", score[0])
+
+        scores = model.predict(x_test, verbose=1, batch_size=cls.BATCH_SIZE)
+
+        cls.recurrent_model = model
+        cls.__plot_learning_graphs('rec', model, history, x_test)
+
+        #print(cls.df_train)
 
     @classmethod
     def __score_to_label(cls, score, include_neutral=True):
@@ -379,6 +464,78 @@ class NNEnglish:
     @classmethod
     def __decode_sentiment(cls, label):
         return cls.DECODE_MAP[int(label)]
+
+    @classmethod
+    def __plot_learning_graphs(cls, model_name, model, history, x_test):
+        cls.__save_learning_results_plot(
+            model_name,
+            acc=history.history['accuracy'],
+            val_acc=history.history['val_accuracy'],
+            loss=history.history['loss'],
+            val_loss=history.history['val_loss']
+        )
+
+        y_test_1d = list(cls.df_test.target)
+        scores = model.predict(x_test, verbose=1, batch_size=cls.BATCH_SIZE)
+        y_pred_1d = [cls.__score_to_label(score, include_neutral=False) for score in scores]
+
+        cnf_matrix = confusion_matrix(y_test_1d, y_pred_1d)
+        cls.__save_confusion_matrix_plot(
+            model_name,
+            cnf_matrix,
+            classes=cls.df_train.target.unique(),
+            title="Confusion matrix"
+        )
+
+        print(classification_report(y_test_1d, y_pred_1d))
+        print(accuracy_score(y_test_1d, y_pred_1d))
+
+    @staticmethod
+    def __save_learning_results_plot(model_name, acc, val_acc, loss, val_loss):
+        epochs = range(len(acc))
+
+        plt.plot(epochs, acc, 'b', label='Training acc')
+        plt.plot(epochs, val_acc, 'r', label='Validation acc')
+        plt.title('Training and validation accuracy')
+        plt.legend()
+
+        plt.figure()
+
+        plt.plot(epochs, loss, 'b', label='Training loss')
+        plt.plot(epochs, val_loss, 'r', label='Validation loss')
+        plt.title('Training and validation loss')
+        plt.legend()
+
+        plt.savefig(f'./imgs/training_graph_{model_name}.png')
+
+    @classmethod
+    def __save_confusion_matrix_plot(
+            cls, model_name, cm, classes, title='Confusion matrix', cmap=plt.get_cmap('Blues')
+    ):
+        """
+        This function prints and plots the confusion matrix.
+        Normalization can be applied by setting `normalize=True`.
+        """
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+        plt.figure(figsize=(12, 12))
+        plt.imshow(cm, interpolation='nearest', cmap=cmap)
+        plt.title(title, fontsize=30)
+        plt.colorbar()
+        tick_marks = np.arange(len(classes))
+        plt.xticks(tick_marks, classes, rotation=90, fontsize=22)
+        plt.yticks(tick_marks, classes, fontsize=22)
+
+        fmt = '.2f'
+        thresh = cm.max() / 2.
+        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+            plt.text(j, i, format(cm[i, j], fmt),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+        plt.ylabel('True label', fontsize=25)
+        plt.xlabel('Predicted label', fontsize=25)
+        plt.savefig(f'./imgs/training_graph_squares_{model_name}.png')
 
 
 NNEnglish.initialize()
